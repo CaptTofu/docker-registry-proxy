@@ -1,0 +1,107 @@
+---
+
+- name: remove existing proxy cert, and key
+  become: no
+  local_action: file path="{{ cert_local_path }}/{{ item }}" state=absent
+  ignore_errors: yes
+  with_items:
+  - docker-registry.crt
+  - docker-registry.key
+
+- name: remove existing htpasswd
+  become: no
+  local_action: file path="{{ files_local_path }}/{{ item }}" state=absent
+  ignore_errors: yes
+  with_items:
+  - htpasswd
+
+- name: create registry proxy htpasswd
+  become: no
+  run_once: true
+  local_action: htpasswd path="{{ files_local_path }}/htpasswd" name="{{ docker_registry_proxy.username }}" password="{{ docker_registry_proxy.password }}"
+
+- name: ensure local cert directory is there
+  become: no
+  run_once: true
+  local_action: file path="{{ cert_local_path }}" state=directory
+
+- name: create self-signed SSL key & cert
+  become: no
+  run_once: true
+  local_action: command openssl req -new -nodes -x509 -subj "/C={{ docker_registry_proxy.ssl.country }}/ST={{ docker_registry_proxy.ssl.state }}/L={{ docker_registry_proxy.ssl.city }}/O={{ docker_registry_proxy.ssl.org }}/CN={{ inventory_hostname }}" -days 3650 -keyout {{ cert_local_path }}/docker-registry.key -out {{ cert_local_path}}/docker-registry.crt -extensions v3_ca creates={{ cert_local_path }}/docker-registry.crt
+
+- name: create registry container volume directory
+  file: path="{{ docker_registry_proxy.volume_path }}/certs" state=directory
+
+- name: copy certs to volume directory
+  become: yes
+  copy: src="certs/{{ item }}" dest="{{ docker_registry_proxy.volume_path }}/certs/{{ item }}"
+  with_items:
+  - docker-registry.crt
+  - docker-registry.key
+
+- name: copy htpasswd
+  become: yes
+  copy: src=htpasswd dest={{ docker_registry_proxy.volume_path}}/.htpasswd mode=0777
+
+# Restart of the docker service is required after
+#- name: restart docker
+#  service: name=docker state=restarted
+
+- name: stop registry proxy container if running
+  become: yes
+  docker:
+    ports:
+    - "{{ docker_registry_proxy.port|string }}:{{ docker_registry_proxy.port|string }}"
+    name: docker-registry-proxy
+    pull: missing
+    image: containersol/docker-registry-proxy:latest
+    hostname: docker-registry-proxy
+    state: absent
+    restart_policy: always
+    volumes:
+    - "{{ docker_registry.volume_path }}/.htpasswd:/etc/nginx/.htpasswd:ro"
+    - "{{ docker_registry.volume_path }}/certs:/etc/nginx/ssl:ro"
+    env:
+      REGISTRY_HOST: docker-registry
+      REGISTRY_PORT: 5000
+      SERVER_NAME: "{{ inventory_hostname }}"
+    links:
+    - "docker-registry:docker-registry"
+    detach: True
+  tags:
+  - run-container
+
+- name: start registry proxy container
+  become: yes
+  docker:
+    ports:
+    - "{{ docker_registry_proxy.port|string }}:{{ docker_registry_proxy.port|string }}"
+    name: docker-registry-proxy
+    pull: missing
+    image: containersol/docker-registry-proxy:latest
+    hostname: docker-registry-proxy
+    state: started
+    restart_policy: always
+    volumes:
+    - "{{ docker_registry.volume_path }}/.htpasswd:/etc/nginx/.htpasswd:ro"
+    - "{{ docker_registry.volume_path }}/certs:/etc/nginx/ssl:ro"
+    env:
+      REGISTRY_HOST: docker-registry
+      REGISTRY_PORT: 5000
+      SERVER_NAME: "{{ inventory_hostname }}"
+    links:
+    - "docker-registry:docker-registry"
+    detach: True
+  tags:
+  - run-container
+
+# these containers run outside of kubernetes (chicken/egg) and need a means
+#  to be restarted through host reboots
+- name: render systemd unit file for registry proxy container
+  become: yes
+  notify: reload systemd
+  template: src=container.service.j2 dest="/etc/systemd/system/{{ item }}.service"
+  with_items:
+    - docker-registry-proxy
+  when: is_systemd

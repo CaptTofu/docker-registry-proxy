@@ -1,0 +1,6 @@
+---
+
+registry_path: "{{ docker_registry_proxy.fqdn }}:{{ docker_registry_proxy.port|string }}"
+role_dir: "{{ playbook_dir }}/roles/docker-registry-proxy"
+files_local_path: "{{ role_dir }}/files"
+cert_local_path: "{{ files_local_path}}/certs"

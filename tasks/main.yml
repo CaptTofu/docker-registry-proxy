@@ -1,0 +1,50 @@
+---
+
+- name: debug registry path
+  set_fact:
+    registry_path: "{{ docker_registry_proxy.fqdn }}:{{ docker_registry_proxy.port|string }}"
+  tags:
+  - registry-debug
+
+- name: debug registry path
+  debug: msg="{{ registry_path }}"
+  tags:
+  - registry-debug
+
+- name: Apt Install various core packages
+  become: yes
+  apt: pkg="{{ item }}" state=present force="yes"
+  with_items:
+    - apache2-utils
+  environment: "{{ proxy_env }}"
+  when: internal_repo is not defined
+
+- name: install docker-py python module
+  become: yes
+  pip: name="{{ item }}" extra_args="--upgrade --ignore-installed" state=present
+  with_items:
+  - docker-py
+  environment: "{{ proxy_env }}"
+  when: internal_repo is not defined
+
+- name: install passlib python module for local
+  become: yes
+  run_once: true
+  local_action: pip name="{{ item }}" extra_args="--upgrade --ignore-installed" state=present
+  with_items:
+  - passlib
+  environment: "{{ proxy_env }}"
+  when: internal_repo is not defined and local_automation is defined
+
+- name: Set up local registry proxy
+  become: yes
+  include: registry-proxy.yml
+  tags:
+    - setup-registry
+  when: (inventory_hostname == registry_host) or (multiple_registry_hosts == true)
+
+- name: set up docker host with private registry certs
+  become: yes
+  include: registry-certs.yml
+  tags:
+    - setup-registry

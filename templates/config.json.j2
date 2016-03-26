@@ -1,0 +1,9 @@
+{% set auth_string = docker_registry_proxy.username + ':' + docker_registry_proxy.password %} 
+{
+        "auths": {
+                "{{ docker_registry_proxy.fqdn }}:{{ docker_registry_proxy.port }}": {
+                        "auth": "{{ auth_string|b64encode }}",
+                        "email": "{{ docker_registry_proxy.email }}"
+                }
+        }
+}

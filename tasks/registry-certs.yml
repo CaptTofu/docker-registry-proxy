@@ -1,0 +1,28 @@
+---
+
+- name: set up docker certs directory
+  file: path=/etc/docker/certs.d state=directory 
+
+- name: set up docker cert directory
+  file: path="/etc/docker/certs.d/{{ docker_registry_proxy.fqdn}}:{{ docker_registry_proxy.port }}" state=directory 
+
+- name: copy ca.crt for docker
+  notify: restart docker
+  copy: src=certs/docker-registry.crt dest="/etc/docker/certs.d/{{ docker_registry_proxy.fqdn }}:{{ docker_registry_proxy.port }}/ca.crt" 
+
+- name: restart docker after certs copied to /etc/docker/certs.d
+  service: name=docker state=restarted
+
+- name: create .docker directory for root
+  become: yes
+  file: path="/root/.docker" state=directory owner=root
+
+- name: write docker config.json for secure registry login for root
+  become: yes
+  template: src="config.json.j2" dest="/root/.docker/config.json"
+
+- name: create .docker directory for ansible_user
+  file: path="/home/{{ ansible_user }}/.docker" state=directory owner="{{ ansible_user }}"
+
+- name: write docker config.json for secure registry login for vagrant user 
+  template: src="config.json.j2" dest="/home/{{ ansible_user }}/.docker/config.json" owner="{{ ansible_user }}"

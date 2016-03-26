@@ -1,0 +1,14 @@
+---
+
+registry_host: "{{ inventory_hostname }}"
+docker_registry_proxy:
+  username: docker
+  password: d0cker
+  volume_path: /var/data/docker-registry
+  port: 443
+  fqdn: "{{ inventory_hostname }}"
+  ssl:
+    country: US
+    state: CA
+    city: Sunnyvale
+    org: HPE
