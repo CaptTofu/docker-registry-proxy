@@ -17,7 +17,7 @@
   with_items:
     - apache2-utils
   environment: "{{ proxy_env }}"
-  when: internal_repo is not defined
+  when: internal_repo is not defined and ansible_os_family == 'Debian'
 
 - name: install docker-py python module
   become: yes
@@ -25,7 +25,7 @@
   with_items:
   - docker-py
   environment: "{{ proxy_env }}"
-  when: internal_repo is not defined
+  when: internal_repo is not defined and ansible_os_family == 'Debian'
 
 - name: install passlib python module for local
   become: yes
